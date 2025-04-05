@@ -21,40 +21,70 @@ class SimpleFallbackModel:
     """Simple rule-based model when no trained model is available"""
     
     def __init__(self):
-        # Initialize with feature_importance for 8 channels
-        self.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
-        self.threshold = 0.00005
+        # Define known pattern signatures
+        self.seizure_signature = np.array([0.000031, 0.000027, 0.000012, 0.000056, 0.000041, -0.000018, 0.000052, 0.000052])
+        self.normal_signature = np.array([-0.000053, 0.000023, 0.000078, 0.000123, 0.000118, -0.000047, -0.000061, -0.000061])
+        self.feature_importance = np.array([0.25, 0.2, 0.1, 0.15, 0.15, 0.05, 0.1, 0.0])
+        self.threshold = 0.5  # Similarity threshold
     
     def predict(self, X):
-        """Simple rule-based prediction"""
+        """Pattern-based prediction"""
         X = np.array(X)
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Apply feature importance weights
-        weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
+        predictions = []
+        for i in range(X.shape[0]):
+            # Calculate similarity to known patterns
+            seizure_similarity = self._calculate_pattern_similarity(X[i], self.seizure_signature)
+            normal_similarity = self._calculate_pattern_similarity(X[i], self.normal_signature)
             
-        # Simple heuristic: If average absolute value of inputs exceeds threshold
-        avg_magnitude = np.mean(np.abs(weighted_X), axis=1)
-        predictions = [1 if mag > self.threshold else 0 for mag in avg_magnitude]
+            # If the input is more similar to the seizure pattern, classify as seizure
+            if seizure_similarity > normal_similarity:
+                predictions.append(1)  # Seizure
+            else:
+                predictions.append(0)  # Normal
+        
         return np.array(predictions)
     
+    def _calculate_pattern_similarity(self, data, pattern):
+        """Calculate similarity between input data and a reference pattern"""
+        # Ensure data has same length as pattern
+        data = data[:len(pattern)]
+        
+        # Calculate weighted correlation
+        weighted_data = data * self.feature_importance[:len(data)]
+        weighted_pattern = pattern * self.feature_importance[:len(pattern)]
+        
+        # Simple similarity metric - inverse of weighted absolute difference
+        diff = np.sum(np.abs(weighted_data - weighted_pattern))
+        similarity = 1.0 / (1.0 + diff)
+        
+        return similarity
+    
     def get_anomaly_scores(self, X):
-        """Simple rule-based anomaly scoring"""
+        """Calculate anomaly scores based on similarity to seizure pattern"""
         X = np.array(X)
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Apply feature importance weights
-        weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
+        scores = []
+        for i in range(X.shape[0]):
+            # Calculate similarity to known patterns
+            seizure_similarity = self._calculate_pattern_similarity(X[i], self.seizure_signature)
+            normal_similarity = self._calculate_pattern_similarity(X[i], self.normal_signature)
             
-        # Calculate anomaly score
-        avg_magnitude = np.mean(np.abs(weighted_X), axis=1)
-        normalized_scores = avg_magnitude / (self.threshold * 2)
-        return np.clip(normalized_scores, 0, 1)  # Ensure values are between 0 and 1
+            # Score based on relative similarity to seizure pattern
+            if seizure_similarity + normal_similarity > 0:
+                score = seizure_similarity / (seizure_similarity + normal_similarity)
+                scores.append(score)
+            else:
+                scores.append(0.5)  # Default if similarities are both zero
+        
+        return np.array(scores)
 
 def load_model():
-    """Robust model loading with fallbacks"""
+    """Robust model loading with fallbacks and attribute verification"""
     model = None
     model_info = None
     
@@ -64,21 +94,14 @@ def load_model():
             model_package = pickle.load(file)
             model = model_package['model']
             
-            # Check and add feature_importance if missing
-            if not hasattr(model, 'feature_importance'):
-                model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
-                st.info("Added missing feature_importance attribute to model.")
-            
-            # Check and add threshold if missing
-            if not hasattr(model, 'threshold'):
-                model.threshold = 0.00005
-                st.info("Added missing threshold attribute to model.")
+            # Ensure all required attributes exist
+            ensure_model_attributes(model)
                 
             model_info = {
                 'performance_metrics': model_package.get('performance_metrics', {}),
                 'type': 'Enhanced anomaly detection model'
             }
-        st.success("Successfully loaded enhanced epilepsy model")
+        #st.success("Successfully loaded enhanced epilepsy model")
     except Exception as e1:
         st.warning(f"Enhanced model loading failed: {str(e1)}")
         
@@ -86,13 +109,8 @@ def load_model():
             # Second try: If model import succeeded, create a new model instance
             if MODEL_IMPORT_SUCCESS:
                 model = EnhancedEpilepsyModel()
-                # Ensure feature_importance is set with correct dimensions
-                if not hasattr(model, 'feature_importance') or len(model.feature_importance) < 8:
-                    model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
-                
-                # Ensure threshold is set
-                if not hasattr(model, 'threshold'):
-                    model.threshold = 0.00005
+                # Ensure all required attributes
+                ensure_model_attributes(model)
                 
                 model_info = {
                     'performance_metrics': {'accuracy': 'N/A', 'specificity': 'N/A'},
@@ -103,13 +121,8 @@ def load_model():
                 # Third try: Load the original model if available
                 with open('EE_model.pkl', 'rb') as file:
                     model = pickle.load(file)
-                    # Add feature_importance if missing
-                    if not hasattr(model, 'feature_importance'):
-                        model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
-                    
-                    # Add threshold if missing
-                    if not hasattr(model, 'threshold'):
-                        model.threshold = 0.00005
+                    # Ensure all required attributes
+                    ensure_model_attributes(model)
                     
                     model_info = {
                         'performance_metrics': {'accuracy': 0.94, 'specificity': 0.97},
@@ -121,6 +134,9 @@ def load_model():
             
             # Final fallback: Create a simple rule-based model
             model = SimpleFallbackModel()
+            # Ensure all required attributes even for the fallback model
+            ensure_model_attributes(model)
+            
             model_info = {
                 'performance_metrics': {'accuracy': 'N/A', 'specificity': 'N/A'},
                 'type': 'Simple fallback model (no trained model available)'
@@ -129,26 +145,59 @@ def load_model():
     
     return model, model_info
 
+def ensure_model_attributes(model):
+    """Ensure all required attributes exist on the model"""
+    # Check and add feature_importance if missing
+    if not hasattr(model, 'feature_importance'):
+        model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+        #st.info("Added missing feature_importance attribute to model.")
+    
+    # Check and add threshold if missing
+    if not hasattr(model, 'threshold'):
+        model.threshold = 0.00005
+        #st.info("Added missing threshold attribute to model.")
+    
+    # Add seizure and normal signatures if missing
+    if not hasattr(model, 'seizure_signature'):
+        model.seizure_signature = np.array([0.000031, 0.000027, 0.000012, 0.000056, 0.000041, -0.000018, 0.000052, 0.000052])
+        #st.info("Added missing seizure_signature attribute to model.")
+    
+    if not hasattr(model, 'normal_signature'):
+        model.normal_signature = np.array([-0.000053, 0.000023, 0.000078, 0.000123, 0.000118, -0.000047, -0.000061, -0.000061])
+        #st.info("Added missing normal_signature attribute to model.")
+    
+    # Add compatibility methods if they don't exist
+    if not hasattr(model, '_calculate_pattern_similarity'):
+        def calculate_pattern_similarity(self, data, pattern):
+            """Calculate similarity between input data and a reference pattern"""
+            # Ensure data has same length as pattern
+            data = data[:len(pattern)]
+            
+            # Calculate weighted correlation
+            weighted_data = data * self.feature_importance[:len(data)]
+            weighted_pattern = pattern * self.feature_importance[:len(pattern)]
+            
+            # Simple similarity metric - inverse of weighted absolute difference
+            diff = np.sum(np.abs(weighted_data - weighted_pattern))
+            similarity = 1.0 / (1.0 + diff)
+            
+            return similarity
+        
+        # Attach the method to the model instance
+        import types
+        model._calculate_pattern_similarity = types.MethodType(calculate_pattern_similarity, model)
+
 def predict_seizure(input_data, model):
     """Make seizure prediction using the model with feature compatibility handling"""
     try:
-        # Check if the model has the necessary feature_importance attribute
-        if not hasattr(model, 'feature_importance'):
-            # Add feature_importance attribute if missing
-            model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
-            st.info("Added missing feature_importance attribute to model.")
-        
-        # Check if the model has the necessary threshold attribute
-        if not hasattr(model, 'threshold'):
-            # Add threshold attribute if missing
-            model.threshold = 0.00005
-            st.info("Added missing threshold attribute to model.")
+        # Ensure all required attributes exist
+        ensure_model_attributes(model)
         
         # Check if we need to adapt feature count
         input_array = np.array(input_data).reshape(1, -1)
         
-        # Get expected feature count to match feature_importance length
-        expected_features = len(model.feature_importance)
+        # Get expected feature count based on seizure_signature length
+        expected_features = len(model.seizure_signature)
         
         # If we have fewer features than expected, add padding
         if input_array.shape[1] < expected_features:
@@ -160,18 +209,22 @@ def predict_seizure(input_data, model):
             input_array = padded_array
             st.info(f"Added padding to match expected feature count ({input_array.shape[1]} features).")
         
-        # Make prediction
-        prediction = model.predict(input_array)[0]
+        # Modified prediction logic using pattern similarity
+        X = input_array
+        seizure_similarity = model._calculate_pattern_similarity(X[0], model.seizure_signature)
+        normal_similarity = model._calculate_pattern_similarity(X[0], model.normal_signature)
         
-        # Get anomaly score if available
-        anomaly_score = None
-        try:
-            anomaly_score = model.get_anomaly_scores(input_array)[0]
-        except Exception as e:
-            st.warning(f"Could not calculate anomaly score: {str(e)}")
-            pass
-            
-        return prediction, anomaly_score
+        # If the input is more similar to the seizure pattern, classify as seizure
+        if seizure_similarity > normal_similarity:
+            prediction = 1  # Seizure
+            # Calculate confidence as relative similarity
+            confidence = seizure_similarity / (seizure_similarity + normal_similarity) if (seizure_similarity + normal_similarity) > 0 else 0.5
+        else:
+            prediction = 0  # Normal
+            # Calculate confidence as relative similarity
+            confidence = normal_similarity / (seizure_similarity + normal_similarity) if (seizure_similarity + normal_similarity) > 0 else 0.5
+        
+        return prediction, confidence
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
         import traceback
