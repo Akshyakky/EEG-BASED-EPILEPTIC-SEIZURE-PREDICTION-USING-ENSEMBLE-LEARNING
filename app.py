@@ -2,7 +2,7 @@ import streamlit as st
 import pickle
 import numpy as np
 
-model = pickle.load(open('EE_anomaly_model.pkl', 'rb'))
+model = pickle.load(open('enhanced_epilepsy_model.pkl', 'rb'))
 
 
 def risk_potability_prediction(input_data):
