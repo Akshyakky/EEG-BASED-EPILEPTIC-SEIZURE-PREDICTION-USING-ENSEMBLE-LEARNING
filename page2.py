@@ -20,15 +20,23 @@ except ImportError as e:
 class SimpleFallbackModel:
     """Simple rule-based model when no trained model is available"""
     
+    def __init__(self):
+        # Initialize with feature_importance for 8 channels
+        self.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+        self.threshold = 0.00005
+    
     def predict(self, X):
         """Simple rule-based prediction"""
         X = np.array(X)
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Simple heuristic: If average absolute value of inputs exceeds a threshold
-        avg_magnitude = np.mean(np.abs(X), axis=1)
-        predictions = [1 if mag > 0.00005 else 0 for mag in avg_magnitude]
+        # Apply feature importance weights
+        weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
+            
+        # Simple heuristic: If average absolute value of inputs exceeds threshold
+        avg_magnitude = np.mean(np.abs(weighted_X), axis=1)
+        predictions = [1 if mag > self.threshold else 0 for mag in avg_magnitude]
         return np.array(predictions)
     
     def get_anomaly_scores(self, X):
@@ -37,9 +45,12 @@ class SimpleFallbackModel:
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Simple heuristic based on deviation from zero
-        avg_magnitude = np.mean(np.abs(X), axis=1)
-        normalized_scores = avg_magnitude / 0.0001  # Normalize to approximate 0-1 range
+        # Apply feature importance weights
+        weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
+            
+        # Calculate anomaly score
+        avg_magnitude = np.mean(np.abs(weighted_X), axis=1)
+        normalized_scores = avg_magnitude / (self.threshold * 2)
         return np.clip(normalized_scores, 0, 1)  # Ensure values are between 0 and 1
 
 def load_model():
@@ -52,6 +63,17 @@ def load_model():
         with open('enhanced_epilepsy_model.pkl', 'rb') as file:
             model_package = pickle.load(file)
             model = model_package['model']
+            
+            # Check and add feature_importance if missing
+            if not hasattr(model, 'feature_importance'):
+                model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+                st.info("Added missing feature_importance attribute to model.")
+            
+            # Check and add threshold if missing
+            if not hasattr(model, 'threshold'):
+                model.threshold = 0.00005
+                st.info("Added missing threshold attribute to model.")
+                
             model_info = {
                 'performance_metrics': model_package.get('performance_metrics', {}),
                 'type': 'Enhanced anomaly detection model'
@@ -64,6 +86,14 @@ def load_model():
             # Second try: If model import succeeded, create a new model instance
             if MODEL_IMPORT_SUCCESS:
                 model = EnhancedEpilepsyModel()
+                # Ensure feature_importance is set with correct dimensions
+                if not hasattr(model, 'feature_importance') or len(model.feature_importance) < 8:
+                    model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+                
+                # Ensure threshold is set
+                if not hasattr(model, 'threshold'):
+                    model.threshold = 0.00005
+                
                 model_info = {
                     'performance_metrics': {'accuracy': 'N/A', 'specificity': 'N/A'},
                     'type': 'Fresh instance of enhanced model'
@@ -73,6 +103,14 @@ def load_model():
                 # Third try: Load the original model if available
                 with open('EE_model.pkl', 'rb') as file:
                     model = pickle.load(file)
+                    # Add feature_importance if missing
+                    if not hasattr(model, 'feature_importance'):
+                        model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+                    
+                    # Add threshold if missing
+                    if not hasattr(model, 'threshold'):
+                        model.threshold = 0.00005
+                    
                     model_info = {
                         'performance_metrics': {'accuracy': 0.94, 'specificity': 0.97},
                         'type': 'Original ensemble model'
@@ -94,11 +132,23 @@ def load_model():
 def predict_seizure(input_data, model):
     """Make seizure prediction using the model with feature compatibility handling"""
     try:
+        # Check if the model has the necessary feature_importance attribute
+        if not hasattr(model, 'feature_importance'):
+            # Add feature_importance attribute if missing
+            model.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
+            st.info("Added missing feature_importance attribute to model.")
+        
+        # Check if the model has the necessary threshold attribute
+        if not hasattr(model, 'threshold'):
+            # Add threshold attribute if missing
+            model.threshold = 0.00005
+            st.info("Added missing threshold attribute to model.")
+        
         # Check if we need to adapt feature count
         input_array = np.array(input_data).reshape(1, -1)
         
-        # Get expected feature count through inspection or try a small prediction
-        expected_features = 8  # Based on the error message
+        # Get expected feature count to match feature_importance length
+        expected_features = len(model.feature_importance)
         
         # If we have fewer features than expected, add padding
         if input_array.shape[1] < expected_features:
@@ -117,12 +167,15 @@ def predict_seizure(input_data, model):
         anomaly_score = None
         try:
             anomaly_score = model.get_anomaly_scores(input_array)[0]
-        except:
+        except Exception as e:
+            st.warning(f"Could not calculate anomaly score: {str(e)}")
             pass
             
         return prediction, anomaly_score
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
+        import traceback
+        st.error(f"Details: {traceback.format_exc()}")
         return None, None
 
 def display_prediction_results(prediction, anomaly_score=None):

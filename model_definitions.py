@@ -6,7 +6,8 @@ class EnhancedEpilepsyModel(BaseEstimator, ClassifierMixin):
     
     def __init__(self, threshold=0.00005):
         self.threshold = threshold
-        self.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13])
+        # Extended to 8 features to match the input data in the UI
+        self.feature_importance = np.array([0.2, 0.15, 0.12, 0.18, 0.14, 0.08, 0.13, 0.0])
         
     def predict(self, X):
         """Predict seizure occurrence based on EEG data"""
@@ -14,7 +15,7 @@ class EnhancedEpilepsyModel(BaseEstimator, ClassifierMixin):
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Apply feature importance weights
+        # Apply feature importance weights - ensure dimensionality match
         weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
         
         # Calculate the weighted magnitude
@@ -30,7 +31,7 @@ class EnhancedEpilepsyModel(BaseEstimator, ClassifierMixin):
         if X.ndim == 1:
             X = X.reshape(1, -1)
             
-        # Apply feature importance weights
+        # Apply feature importance weights - ensure dimensionality match
         weighted_X = X[:, :self.feature_importance.shape[0]] * self.feature_importance
         
         # Calculate the weighted magnitude
