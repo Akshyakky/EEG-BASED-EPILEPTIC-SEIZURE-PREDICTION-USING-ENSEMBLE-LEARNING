@@ -1,41 +1,42 @@
 import streamlit as st
-import pickle
-import numpy as np
+import sys
+import os
 
-model = pickle.load(open('enhanced_epilepsy_model.pkl', 'rb'))
+# Add the current directory to path to ensure imports work
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-
-def risk_potability_prediction(input_data):
-    input_as_array = np.array(input_data).reshape(1,-1)
-    prediction = model.predict(input_as_array)[0]
-    return prediction
-
+# Import page modules
+from page1 import page_1
+from page2 import page_2
+from page3 import page_3
+from page4 import page_4
 
 def main():
-    st.set_page_config(page_title='EEG - Based Epileptic Seizure Prediction')
-    st.title('EEG - Based Epileptic Seizure Prediction')
-    st.write('This app predicts Epileptic Seizure Prediction')
+    """Main function to run the Streamlit application"""
     
-    st.subheader('Epileptic Seizure Prediction')
+    # Configure the page
+    st.set_page_config(
+        page_title='EEG-Based Epileptic Seizure Prediction',
+        page_icon="⚕️",
+        layout="wide"
+    )
     
-    mar = st.number_input('# FP1-F7', format="%.7f", min_value=0.0, max_value=100.0, value=7.0, step=0.1)
-    deb = st.number_input('C3-P3', format="%.7f", min_value=0.0, value=50.0, step=1.0)
-    dis = st.number_input('P3-O1', format="%.7f", min_value=0.0, value=50.0, step=1.0)
-    gen = st.number_input('P4-O2', format="%.7f", min_value=-0.0000303, value=50.0, step=1.0)
-    crs = st.number_input('P7-O1', format="%.7f", min_value=0.0, max_value=1000.0, step=1.0)
-    gdp = st.number_input('P7-T7', format="%.7f", min_value=-0.0000303, value=50.0, step=1.0)
-    pqg = st.number_input('T8-P8-0', format="%.7f", min_value=0.0, value=50.0, step=1.0)
-    pqg1 = st.number_input('T8-P8-1', format="%.7f", min_value=0.0, value=50.0, step=1.0)
-   
-   
-    if st.button('Predict'):
-        input_data = [mar, deb, dis, gen, crs, gdp, pqg, pqg1]
-        prediction = risk_potability_prediction(input_data)
-        if prediction == 0:
-            st.error('The Patient is affected by  Epileptic Seizure.')
-            
-        else:
-            st.success('The Patient is not affected by  Epileptic Seizure.')
+    # Define a sidebar navigation menu
+    st.sidebar.title("Navigation")
+    page_selection = st.sidebar.selectbox(
+        "Go to", 
+        ["Home", "About Epilepsy", "Prediction", "Precautions"]
+    )
+    
+    # Display the selected page
+    if page_selection == "Home":
+        page_1()
+    elif page_selection == "About Epilepsy":
+        page_4()
+    elif page_selection == "Prediction":
+        page_2()
+    elif page_selection == "Precautions":
+        page_3()
 
-if _name_ == '_main_':
+if __name__ == "__main__":
     main()
