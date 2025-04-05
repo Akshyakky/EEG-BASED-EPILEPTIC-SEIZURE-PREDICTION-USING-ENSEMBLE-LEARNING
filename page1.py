@@ -37,17 +37,17 @@ def page_1():
     with col1:
         if st.button("Make a Prediction"):
             st.session_state.page_selection = "Prediction"
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         if st.button("Learn About Epilepsy"):
             st.session_state.page_selection = "About Epilepsy"
-            st.experimental_rerun() 
+            st.rerun()
     
     with col3:
         if st.button("View Precautions"):
             st.session_state.page_selection = "Precautions"
-            st.experimental_rerun()
+            st.rerun()
     
     st.markdown("""
     ---

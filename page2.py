@@ -8,11 +8,13 @@ import os
 # Add the current directory to path to ensure imports work
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Try to import model definitions
+# Try to import model definitions with proper error handling
 try:
     from model_definitions import EnhancedEpilepsyModel
-except ImportError:
-    st.warning("Model definition import failed. Using fallback approach.")
+    MODEL_IMPORT_SUCCESS = True
+except ImportError as e:
+    st.warning(f"Model definition import failed: {str(e)}")
+    MODEL_IMPORT_SUCCESS = False
 
 # Define the fallback model class
 class SimpleFallbackModel:
@@ -59,14 +61,23 @@ def load_model():
         st.warning(f"Enhanced model loading failed: {str(e1)}")
         
         try:
-            # Second try: Load the original model if available
-            with open('EE_model.pkl', 'rb') as file:
-                model = pickle.load(file)
+            # Second try: If model import succeeded, create a new model instance
+            if MODEL_IMPORT_SUCCESS:
+                model = EnhancedEpilepsyModel()
                 model_info = {
-                    'performance_metrics': {'accuracy': 0.94, 'specificity': 0.97},
-                    'type': 'Original ensemble model'
+                    'performance_metrics': {'accuracy': 'N/A', 'specificity': 'N/A'},
+                    'type': 'Fresh instance of enhanced model'
                 }
-            st.success("Successfully loaded original epilepsy model")
+                st.success("Created new enhanced epilepsy model instance")
+            else:
+                # Third try: Load the original model if available
+                with open('EE_model.pkl', 'rb') as file:
+                    model = pickle.load(file)
+                    model_info = {
+                        'performance_metrics': {'accuracy': 0.94, 'specificity': 0.97},
+                        'type': 'Original ensemble model'
+                    }
+                st.success("Successfully loaded original epilepsy model")
         except Exception as e2:
             st.warning(f"Original model loading failed: {str(e2)}")
             
@@ -142,8 +153,8 @@ def display_prediction_results(prediction, anomaly_score=None):
 def load_sample_data():
     """Load sample data for demonstration"""
     return {
-        "Seizure Pattern": [0.000031, 0.000027, 0.000012, 0.000056, 0.000041, -0.000018, 0.000052],
-        "Normal Pattern": [-0.000053, 0.000023, 0.000078, 0.000123, 0.000118, -0.000047, -0.000061]
+        "Seizure Pattern": [0.000031, 0.000027, 0.000012, 0.000056, 0.000041, -0.000018, 0.000052, 0.000052],  # Added 8th value
+        "Normal Pattern": [-0.000053, 0.000023, 0.000078, 0.000123, 0.000118, -0.000047, -0.000061, -0.000061]  # Added 8th value
     }
 
 def page_2():
@@ -194,8 +205,10 @@ def page_2():
         # Alternate between columns
         current_col = col1 if i % 2 == 0 else col2
         
-        # Default value from sample if provided
-        default_val = sample_data[i] if sample_data else (min_val + max_val) / 2
+        # Default value from sample if provided with safe access
+        default_val = (min_val + max_val) / 2  # Default fallback value
+        if sample_data and i < len(sample_data):
+            default_val = sample_data[i]
         
         with current_col:
             val = st.number_input(
